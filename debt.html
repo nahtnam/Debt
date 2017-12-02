@@ -1,0 +1,292 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <title>debt tracker</title>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.1/css/bulma.min.css">
+  </head>
+  <body>
+    <div id="app">
+      <section class="section">
+        <div class="container">
+          <h1 class="title">
+            debt tracker
+          </h1>
+          <p class="subtitle">
+            backed by <strong>ethereum</strong>
+          </p>
+        </div>
+      </section>
+      <section class="section">
+        <div class="container">
+          <!-- for each person -->
+          <div class="columns" v-for="person in people">
+            <div class="column content">
+              <!-- show data -->
+              <h1>{{ person.name }} - ${{ person.debt / 100 }}</h1>
+              <table>
+                <thead>
+                  <tr>
+                    <th>
+                      amount
+                    </th>
+                    <th>
+                      description
+                    </th>
+                    <th>
+                      paid
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="debt in person.debts">
+                    <td>${{ debt.amount / 100 }}</td>
+                    <td>{{ debt.description }}</td>
+                    <td v-if="debt.paid">paid</td>
+                    <td v-else><a @click="payDebt(debt.id, person.name)">mark as paid</a></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="section">
+        <div class="container">
+          <div class="columns">
+            <div class="column content">
+              <h1>Add Person</h1>
+              <form v-on:submit.prevent="addPerson">
+                <div class="field">
+                  <label class="label">Name</label>
+                  <div class="control">
+                    <!-- v-model binds the form field to the js data -->
+                    <input class="input" type="text" placeholder="Name" v-model="newPerson">
+                  </div>
+                </div>
+                <div class="field is-grouped">
+                  <div class="control">
+                    <button type="submit" class="button is-link">Submit</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+            <div class="column content">
+              <h1>Add Debt</h1>
+              <form v-on:submit.prevent="addDebt">
+                <div class="field">
+                  <label class="label">Person Name</label>
+                  <div class="control">
+                    <input class="input" type="text" placeholder="Person Name" v-model="newDebtName">
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="label">Amount (cents)</label>
+                  <div class="control">
+                    <input class="input" type="text" placeholder="Amount (cents)" v-model="newDebtAmount">
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="label">Description</label>
+                  <div class="control">
+                    <input class="input" type="text" placeholder="description" v-model="newDebtDescription">
+                  </div>
+                </div>
+                <div class="field is-grouped">
+                  <div class="control">
+                    <button type="submit" class="button is-link">Submit</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script src="https://unpkg.com/vue"></script>
+    <script>
+      // abi interface
+      const abi = JSON.parse('[{"constant":false,"inputs":[{"name":"id","type":"uint256"}],"name":"payDebt","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"name":"name","type":"bytes32"},{"name":"amount","type":"int256"},{"name":"description","type":"bytes32"}],"name":"addDebt","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"getPeople","outputs":[{"name":"","type":"bytes32[]"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"name","type":"bytes32"}],"name":"getPerson","outputs":[{"name":"","type":"bytes32"},{"name":"","type":"int256"},{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"id","type":"uint256"}],"name":"getDebt","outputs":[{"name":"","type":"int256"},{"name":"","type":"bytes32"},{"name":"","type":"bytes32"},{"name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"name","type":"bytes32"}],"name":"addPerson","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"inputs":[],"payable":false,"stateMutability":"nonpayable","type":"constructor"}]');
+      const debtContract = web3.eth.contract(abi);
+
+      // const debts = debtContract.at('0x33461cb04cb46cd99fe5cce8712f42b0aecc1e28');
+      const debts = debtContract.at('0xbdcca16f976fb79ca7b65562973f09e456f2c642');
+
+      // promisify getPeople
+      const getPeople = new Promise((resolve, reject) => {
+        debts.getPeople((err, data) => {
+          if (err) reject(err);
+          resolve(data);
+        });
+      });
+
+      // promisify getPerson
+      const getPerson = (name) => new Promise((resolve, reject) => {
+        debts.getPerson(name, (err, data) => {
+          if (err) reject(err);
+          resolve(data);
+        });
+      });
+
+      // promisify getDebt
+      const getDebt = (id) => new Promise((resolve, reject) => {
+        debts.getDebt(id, (err, data) => {
+          if (err) reject(err);
+          resolve(data);
+        });
+      });
+
+      // use Vue to dynamically update the page
+      const app = new Vue({
+        el: '#app',
+        data: {
+          // data stored in a js object. anytime this changes, the webpage is efficiently reloaded
+          people: {},
+          newPerson: '',
+          newDebtAmount: '',
+          newDebtDescription: '',
+          newDebtName: '',
+        },
+
+        // when the page first loads run these two functions
+        created () {
+          this.updatePeople();
+          this.updater();
+        },
+
+        methods: {
+          // update with the blockchain every 30 seconds
+          updater () {
+            setTimeout(() => {
+              this.updatePeople();
+              this.updater();
+            }, 30000);
+          },
+
+          // fetch info from the blockchain
+          updatePeople () {
+            // get the people
+            getPeople.then((data) => {
+              // for every person
+              for (let i = 0; i < data.length; i++) {
+                // convert the hex to ascii
+                const name = web3.toAscii(data[i]);
+                // get the individuals persons data
+                getPerson(name).then((data) => {
+                  // process data
+                  const name = web3.toAscii(data[0]).replace(/\0/g, '');
+                  const debt = Number.parseInt(data[1].toString());
+                  const debtsIndex = data[2];
+                  const debts = [];
+                  // for each debt
+                  for (let j = 0; j < debtsIndex.length; j++) {
+                    // get the individual debts data
+                    getDebt(debtsIndex[j]).then((data) => {
+                      // process data and push it to the array
+                      const amount = Number.parseInt(data[0].toString());
+                      const description = web3.toAscii(data[1]).replace(/\0/g, '');
+                      const person = web3.toAscii(data[2]).replace(/\0/g, '');
+                      const paid = data[3];
+                      debts.push({
+                        id: Number.parseInt(debtsIndex[j].toString()),
+                        amount,
+                        description,
+                        person,
+                        paid,
+                      });
+                    });
+                  }
+                  // update the people object to add the person
+                  this.people = { ...this.people, [name]: {
+                    name,
+                    debt,
+                    debts,
+                  }};
+                });
+              }
+            });
+          },
+
+          // process form to add person
+          addPerson () {
+            const name = this.newPerson;
+            if (!name) {
+              alert('please enter a name');
+              return;
+            }
+
+            if (this.people[name]) {
+              alert('person already exists');
+              this.newPerson = '';
+              return;
+            }
+
+            // create a transaction to add a person
+            debts.addPerson(name, { from: web3.eth.accounts[0] }, (err, data) => {
+              if (err) throw err;
+              // temporarily add a person to the js object and hope that the ethereum transaction confirms soon
+              this.people = { ...this.people, [name]: {
+              }};
+              // reset form fields
+              this.newPerson = '';
+            });
+          },
+
+          // process form to add debt
+          addDebt () {
+            // get data from the forms
+            const amount = this.newDebtAmount;
+            const description = this.newDebtDescription;
+            const name = this.newDebtName;
+            
+            if (!name || !description || !amount) {
+              alert('please fill out all fields');
+              return;
+            }
+
+            if (!this.people[name]) {
+              alert('person doesnt exist');
+              return;
+            }
+
+            // create a transaction
+            debts.addDebt(name, amount, description, { from: web3.eth.accounts[0] }, (err, data) => {
+              if (err) throw err;
+              // temporarily push the debt to the data
+              this.people[name].debts.push({
+                amount,
+                description,
+                name,
+                paid: false
+              })
+              // update the total owed amount
+              this.people[name].debt = Number.parseInt(this.people[name].debt) + Number.parseInt(amount);
+              // reset form fields
+              this.newDebtAmount = '';
+              this.newDebtDescription = '';
+              this.newDebtName = '';
+            });
+          },
+
+          // mark the debt as paid
+          payDebt (id, name) {
+            // create transcation
+            debts.payDebt(id, { from: web3.eth.accounts[0] }, (err, data) => {
+              if (err) throw err;
+              // update the js data temporarily
+              const personArr = this.people[name].debts;
+              const objIndex = personArr.findIndex((obj => obj.id == id));
+              personArr[objIndex].paid = true;
+              this.people[name].debts = personArr;
+              this.people[name].debt = Number.parseInt(this.people[name].debt) - Number.parseInt(personArr[objIndex].amount);
+            });
+          }
+        }
+      })
+    </script>
+  </body>
+</html>
